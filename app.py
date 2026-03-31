@@ -389,15 +389,11 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ─── SETTINGS (API key hidden in expander) ───────────────────
-with st.expander("Settings", expanded=False):
-    st.session_state.api_key = st.text_input(
-        "Gemini API Key", type="password",
-        value=st.session_state.api_key,
-        placeholder="Paste key here — free at aistudio.google.com"
-    )
-
-api_key = st.session_state.api_key
+# ─── API KEY from Streamlit Secrets ─────────────────────────
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+except Exception:
+    api_key = ""
 
 # ─── VIEW TOGGLE ─────────────────────────────────────────────
 col_t, col_s, col_empty = st.columns([1.2, 1.2, 6])
