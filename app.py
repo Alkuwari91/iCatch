@@ -146,19 +146,12 @@ Exactly 5 questions, 4 options each. answer must match one option exactly."""
         return None
 
 # ── HERO ──
-today_str = date.today().strftime("%d %B %Y")
 st.markdown(f"""
 <div class="hero-banner">
     <div style="font-size:2.8rem;line-height:1">🎓</div>
     <div>
         <h1>iCatch &nbsp;<span style="font-weight:300;opacity:0.6">|</span>&nbsp; لحق</h1>
-        <div class="sub">نظام التعافي التعليمي بالذكاء الاصطناعي</div>
-        <p>Ministry of Education and Higher Education — State of Qatar &nbsp;|&nbsp; وزارة التربية والتعليم</p>
-    </div>
-    <div style="margin-left:auto;text-align:right;opacity:0.7;font-size:0.82rem;line-height:1.8">
-        Grade 5 — English Language<br>
-        Amna Mahmoud Aljaida Primary<br>
-        {today_str}
+        <div class="sub">No Student Left Behind</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
