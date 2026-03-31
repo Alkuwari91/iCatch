@@ -8,7 +8,6 @@ from rag import build_corpus, embed_corpus, retrieve, build_context
 
 st.set_page_config(
     page_title="iCatch | لحق",
-    page_icon="🎓",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -268,7 +267,7 @@ LESSON_MAP = {l["display"]: l for l in ALL_LESSONS}
 
 # ─── AI FUNCTIONS ────────────────────────────────────────────
 def call_gemini(prompt, api_key):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     try:
         r = requests.post(url, json={"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"temperature":0.7,"maxOutputTokens":2000}}, timeout=40)
         data = r.json()
