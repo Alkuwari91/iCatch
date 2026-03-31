@@ -4,9 +4,11 @@ import json
 import pandas as pd
 from datetime import date
 from curriculum import CURRICULUM, STANDARDS, get_lessons_by_module, get_all_lessons
+from rag import build_corpus, embed_corpus, retrieve, build_context
 
 st.set_page_config(
     page_title="iCatch | لحق",
+    page_icon="🎓",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -309,24 +311,27 @@ Remember This!
     return call_gemini(prompt, api_key)
 
 def gen_worksheet(lesson_name, lesson_info, level, api_key):
-    vocab_str = ", ".join(lesson_info.get("vocabulary", [])[:10])
+    corpus = st.session_state.get("rag_corpus") or []
+    query  = f"{lesson_name} {level} Grade 5 English worksheet exercises"
+    chunks = retrieve(query, corpus, api_key, top_k=3) if corpus else [lesson_info]
+    context = build_context(chunks)
     prompt = f"""You are a Grade 5 English teacher in Qatar.
-Create a practice worksheet based STRICTLY on the following textbook content.
+Generate a practice worksheet using ONLY the curriculum content below.
 
-TOPIC: {lesson_name}
-CURRICULUM RULES:
-{lesson_info["key_rules"]}
-VOCABULARY TO USE: {vocab_str}
+RETRIEVED CURRICULUM CONTEXT:
+{context}
+
+TARGET LESSON: {lesson_name}
 STUDENT LEVEL: {level}
 
 Write a worksheet (plain text, no asterisks or hash symbols):
 
 EXERCISE 1 - Fill in the Blanks
-Word bank: [choose 5 words from the vocabulary above]
-5 sentences with one blank each. Use the curriculum rules above.
+Word bank: [5 words from the retrieved vocabulary]
+5 sentences with one blank each. Based strictly on the curriculum rules above.
 
 EXERCISE 2 - Circle the Correct Answer
-4 questions testing the grammar/phonics rules above. Options: a / b / c
+4 questions testing the grammar or phonics from the context above. Options: a / b / c
 
 EXERCISE 3 - Write Your Own Sentences
 3 prompts asking the student to write sentences using today's rule.
@@ -360,12 +365,127 @@ Rules: exactly 5 questions, 4 options each, answer must match one option exactly
     except:
         return None
 
+
+def gen_video_lesson(lesson_name, lesson_info, level, api_key):
+    """RAG-powered: generate structured JSON for HTML5 interactive lesson."""
+    corpus  = st.session_state.get("rag_corpus") or []
+    query   = f"{lesson_name} {level} interactive explanation examples"
+    chunks  = retrieve(query, corpus, api_key, top_k=3) if corpus else [lesson_info]
+    context = build_context(chunks)
+
+    prompt = f"""You are creating a 4-slide interactive lesson for a Grade 5 student in Qatar.
+Use ONLY the curriculum content below as your source.
+
+RETRIEVED CURRICULUM CONTEXT:
+{context}
+
+TARGET LESSON: {lesson_name}
+STUDENT LEVEL: {level}
+
+Return ONLY a valid JSON object, no markdown, no explanation:
+{{
+  "title": "short lesson title",
+  "slides": [
+    {{"id":1,"title":"Learning Goal","body":"one clear sentence stating what we learn today","example":""}},
+    {{"id":2,"title":"The Rule","body":"clear explanation of the grammar or phonics rule","example":"one example sentence from the curriculum"}},
+    {{"id":3,"title":"Examples","body":"3 example sentences from the curriculum content, numbered 1 2 3","example":""}},
+    {{"id":4,"title":"Remember!","body":"one memorable tip from the curriculum","example":"a short practice sentence for the student to complete"}}
+  ]
+}}"""
+
+    raw = call_gemini(prompt, api_key).strip()
+    if "```" in raw:
+        for p in raw.split("```"):
+            p = p.strip().lstrip("json").strip()
+            if p.startswith("{"):
+                raw = p; break
+    s, e = raw.find("{"), raw.rfind("}")+1
+    if s != -1 and e > s:
+        raw = raw[s:e]
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return None
+
+    colors = ["#8D1B3D","#B85C1A","#3D6B2C","#1A5C7A"]
+    icons  = ["🎯","📖","✏️","💡"]
+
+    slides_html = ""
+    for i, sl in enumerate(data.get("slides",[])):
+        c = colors[i % len(colors)]
+        icon = icons[i % len(icons)]
+        ex = f'<div style="margin-top:14px;background:rgba(255,255,255,0.15);border-radius:8px;padding:10px 14px;font-size:0.9rem;font-style:italic">{sl.get("example","")}</div>' if sl.get("example") else ""
+        slides_html += f'''
+        <div class="slide" id="slide{sl["id"]}" style="display:none">
+            <div style="background:{c};color:white;border-radius:14px;padding:30px 36px;min-height:280px;box-shadow:0 6px 24px rgba(0,0,0,0.15)">
+                <div style="font-size:1.8rem;margin-bottom:10px">{icon}</div>
+                <div style="font-size:1.15rem;font-weight:700;margin-bottom:14px;opacity:0.85">{sl["title"]}</div>
+                <div style="font-size:1rem;line-height:1.75">{sl["body"]}</div>
+                {ex}
+            </div>
+        </div>'''
+
+    html = f'''<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  body{{margin:0;padding:16px;font-family:Inter,Tajawal,sans-serif;background:#F2EDE6}}
+  .header{{text-align:center;margin-bottom:18px}}
+  .header h2{{margin:0;font-size:1.1rem;color:#2C1F14}}
+  .header p{{margin:4px 0 0;font-size:0.82rem;color:#7A6858}}{lesson_name} · {level} Level
+  .dots{{display:flex;justify-content:center;gap:8px;margin:16px 0}}
+  .dot{{width:10px;height:10px;border-radius:50%;background:#D8CDBC;transition:background .3s;cursor:pointer}}
+  .dot.active{{background:#8D1B3D}}
+  .nav{{display:flex;justify-content:space-between;align-items:center;margin-top:16px}}
+  .btn{{background:#8D1B3D;color:white;border:none;border-radius:8px;padding:10px 28px;font-size:0.9rem;font-weight:600;cursor:pointer;transition:background .2s}}
+  .btn:hover{{background:#6B1530}}
+  .btn:disabled{{background:#D8CDBC;cursor:default}}
+  .counter{{font-size:0.82rem;color:#7A6858}}
+</style>
+</head>
+<body>
+<div class="header">
+  <h2>{data.get("title","Interactive Lesson")}</h2>
+  <p>{lesson_name} · {level} Level</p>
+</div>
+{slides_html}
+<div class="dots" id="dots"></div>
+<div class="nav">
+  <button class="btn" id="prevBtn" onclick="move(-1)" disabled>Back</button>
+  <span class="counter" id="counter">1 / {len(data.get("slides",[]))}</span>
+  <button class="btn" id="nextBtn" onclick="move(1)">Next</button>
+</div>
+<script>
+var cur=0, total={len(data.get("slides",[]))};
+var dots=document.getElementById("dots");
+for(var i=0;i<total;i++){{var d=document.createElement("span");d.className="dot"+(i==0?" active":"");d.setAttribute("data-i",i);d.onclick=function(){{goTo(+this.getAttribute("data-i"))}};dots.appendChild(d);}}
+function show(){{
+  for(var i=1;i<=total;i++)document.getElementById("slide"+i).style.display="none";
+  document.getElementById("slide"+(cur+1)).style.display="block";
+  document.querySelectorAll(".dot").forEach(function(d,i){{d.className="dot"+(i==cur?" active":"")}});
+  document.getElementById("counter").textContent=(cur+1)+" / "+total;
+  document.getElementById("prevBtn").disabled=cur==0;
+  document.getElementById("nextBtn").disabled=cur==total-1;
+}}
+function move(d){{cur=Math.max(0,Math.min(total-1,cur+d));show();}}
+function goTo(i){{cur=i;show();}}
+show();
+</script>
+</body>
+</html>'''
+    return html
+
 # ─── SESSION STATE ───────────────────────────────────────────
+# ─── RAG corpus (built once per session) ────────────────────
+import numpy as np
+
 defaults = {
     "view":"teacher","api_key":"",
     "lesson_content":None,"worksheet_content":None,
     "quiz_questions":None,"quiz_submitted":False,"quiz_answers":{},
-    "pack_sent":False,"selected_student_cache":None
+    "pack_sent":False,"selected_student_cache":None,
+    "rag_corpus":None,"rag_ready":False
 }
 for k,v in defaults.items():
     if k not in st.session_state:
@@ -468,10 +588,16 @@ if st.session_state.view == "teacher":
                 if not api_key:
                     st.error("Please add your API Key in Settings above.")
                 else:
+                    with st.spinner("Building knowledge base..."):
+                        if not st.session_state.rag_ready:
+                            corpus = build_corpus()
+                            st.session_state.rag_corpus = embed_corpus(corpus, api_key)
+                            st.session_state.rag_ready  = True
                     with st.spinner("Preparing personalised recovery pack..."):
                         st.session_state.lesson_content    = gen_lesson(selected_lesson, lesson, student['level'], api_key)
                         st.session_state.worksheet_content = gen_worksheet(selected_lesson, lesson, student['level'], api_key)
                         st.session_state.quiz_questions    = gen_quiz(selected_lesson, lesson, student['level'], api_key)
+                        st.session_state.video_html        = gen_video_lesson(selected_lesson, lesson, student['level'], api_key)
                         st.session_state.pack_sent = True
                     st.rerun()
         else:
@@ -568,18 +694,13 @@ else:
                     st.session_state.quiz_submitted = False
                     st.rerun()
 
-        # ── Video ────────────────────────────────────────────
+        # ── Video (RAG-powered HTML5 interactive lesson) ──────
         with tab4:
-            st.markdown('<div class="section-header">Video Resource</div>', unsafe_allow_html=True)
-            vid_id = lesson.get("video_id","")
-            st.markdown(f"""
-            <div class="video-card">
-                <div class="video-sent-badge">Sent to your device</div>
-                <div style="font-weight:700;margin-bottom:6px;color:var(--text)">{selected_lesson}</div>
-                <div style="color:var(--muted);font-size:0.88rem;margin-bottom:14px">
-                    A short review video covering the key skills from today's lesson.
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            if vid_id:
-                st.components.v1.iframe(f"https://www.youtube.com/embed/{vid_id}", height=340)
+            st.markdown('<div class="section-header">Interactive Lesson</div>', unsafe_allow_html=True)
+            if "video_html" not in st.session_state:
+                st.session_state.video_html = None
+            if st.session_state.video_html:
+                import streamlit.components.v1 as components
+                components.html(st.session_state.video_html, height=500, scrolling=False)
+            else:
+                st.caption("Interactive lesson will appear here once the teacher sends the recovery pack.")
