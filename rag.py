@@ -7,10 +7,10 @@ from curriculum import get_all_lessons, STANDARDS
 def get_embedding(text, api_key):
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"embedding-001:embedContent?key={api_key}"
+        f"text-embedding-004:embedContent?key={api_key}"
     )
     payload = {
-        "model": "models/embedding-001",
+        "model": "models/text-embedding-004",
         "content": {"parts": [{"text": text[:3000]}]}
     }
     try:
