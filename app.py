@@ -268,7 +268,7 @@ LESSON_MAP = {l["display"]: l for l in ALL_LESSONS}
 
 # ─── AI FUNCTIONS ────────────────────────────────────────────
 def call_gemini(prompt, api_key):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
     try:
         r = requests.post(url, json={"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"temperature":0.7,"maxOutputTokens":2000}}, timeout=40)
         data = r.json()
