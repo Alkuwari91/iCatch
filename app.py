@@ -6,7 +6,6 @@ from datetime import date
 
 st.set_page_config(
     page_title="iCatch | لحق",
-    page_icon="🎓",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
