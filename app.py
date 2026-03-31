@@ -426,24 +426,11 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### 🏫 Session Details")
-    st.markdown(f"📅 **{date.today().strftime('%d %B %Y')}**")
-    st.markdown("🏫 Amna Mahmoud Aljaida Primary")
-    st.markdown("📚 Grade 5 — English Language")
-
-    st.markdown("---")
-    st.markdown("### 👤 Absent Student (NSIS)")
-    selected_student = st.selectbox("Select Student", list(STUDENTS.keys()))
-    student = STUDENTS[selected_student]
-
-    level_color = {
-        "Advanced": "#1B5E20",
-        "Intermediate": "#E65100",
-        "Beginner": "#B71C1C"
-    }
+    slevel = student["level"]
     st.markdown(
-        f"**Level:** <span style='background:{level_color[student[\"level\"]]};"
+        f"**Level:** <span style='background:{level_color[slevel]};"
         f"color:white;padding:2px 10px;border-radius:12px;font-size:0.82rem'>"
-        f"{student['level']} | {student['level_ar']}</span>",
+        f"{slevel} | {student['level_ar']}</span>",
         unsafe_allow_html=True
     )
     st.markdown(f"**Avg:** {student['english_avg']}%")
