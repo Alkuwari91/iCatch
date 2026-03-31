@@ -3,9 +3,11 @@ import requests
 import json
 import pandas as pd
 from datetime import date
+from curriculum import CURRICULUM, STANDARDS, get_lessons_by_module, get_all_lessons
 
 st.set_page_config(
     page_title="iCatch | لحق",
+    page_icon="🎓",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -257,43 +259,11 @@ STUDENTS = {
     },
 }
 
-LESSONS = {
-    "Grammar: Present Simple vs Present Continuous": {
-        "type":"Grammar",
-        "objective":"Distinguish between present simple (habits) and present continuous (now)",
-        "key_rule":"I play football every day. (Simple) vs I am playing football now. (Continuous)",
-        "unit":"Unit 4 — Daily Routines",
-        "video_id":"WlM20KkHFKs"
-    },
-    "Grammar: Past Simple (Regular Verbs)": {
-        "type":"Grammar",
-        "objective":"Form and use past simple tense with regular verbs",
-        "key_rule":"Add -ed to the base verb: play to played, walk to walked, study to studied",
-        "unit":"Unit 5 — Yesterday's Events",
-        "video_id":"vFDnJhMGOsU"
-    },
-    "Phonics: Long Vowel Sounds (a_e, i_e, o_e)": {
-        "type":"Phonics",
-        "objective":"Recognize and read words with magic-e long vowel pattern",
-        "key_rule":"When e comes at the end, the vowel says its name: cake, bike, home",
-        "unit":"Unit 3 — Sounds Around Us",
-        "video_id":"UBiZuG6AACU"
-    },
-    "Grammar: Adjectives and Comparatives": {
-        "type":"Grammar",
-        "objective":"Use adjectives to describe and compare people and things",
-        "key_rule":"Short adj: add -er (tall to taller). Long adj: more + adj (beautiful to more beautiful)",
-        "unit":"Unit 6 — Describing the World",
-        "video_id":"IHAYqJsoeOw"
-    },
-    "Vocabulary: School Subjects and Timetable": {
-        "type":"Vocabulary",
-        "objective":"Learn vocabulary for school subjects and use it in context",
-        "key_rule":"Maths, Science, Arabic, Physical Education, Art, Music — used in sentences",
-        "unit":"Unit 2 — School Life",
-        "video_id":"eS4SJL1CleM"
-    },
-}
+# Build LESSONS dict from curriculum for backward compat
+LESSONS_BY_MODULE = get_lessons_by_module()
+ALL_LESSONS = get_all_lessons()
+LESSON_DISPLAY_NAMES = [l["display"] for l in ALL_LESSONS]
+LESSON_MAP = {l["display"]: l for l in ALL_LESSONS}
 
 # ─── AI FUNCTIONS ────────────────────────────────────────────
 def call_gemini(prompt, api_key):
@@ -308,50 +278,75 @@ def call_gemini(prompt, api_key):
         return "Connection error: " + str(e)
 
 def gen_lesson(lesson_name, lesson_info, level, api_key):
+    vocab_str = ", ".join(lesson_info.get("vocabulary", [])[:8])
+    standards_str = ", ".join(lesson_info.get("standards", []))
     prompt = f"""You are a friendly English teacher for Grade 5 in Qatar.
-TOPIC: {lesson_name} | TYPE: {lesson_info['type']} | LEVEL: {level}
-OBJECTIVE: {lesson_info['objective']}
-KEY RULE: {lesson_info['key_rule']}
+A student missed today's lesson and needs a personalised catch-up.
 
-Write a micro-lesson (200-250 words) for a {level} student age 10-11.
+TOPIC: {lesson_name}
+TYPE: {lesson_info["type"]}
+OBJECTIVE: {lesson_info["objective"]}
+CURRICULUM CONTENT (from the textbook):
+{lesson_info["key_rules"]}
+KEY VOCABULARY: {vocab_str}
+STUDENT LEVEL: {level}
+CURRICULUM STANDARDS: {standards_str}
+
+Write a micro-lesson (200-260 words) adapted for a {level} student (age 10-11).
+Base it STRICTLY on the curriculum content above.
 Format (plain text only, no asterisks or hash symbols):
 
 Learning Goal
-[one sentence]
+[one sentence matching the objective]
 
 The Rule
-[explanation adapted to level]
+[explain the key rules simply — shorter/simpler for Beginner, richer for Advanced]
 
 Examples
-[3 sentences, simple to complex]
+[4 clear examples using vocabulary from the lesson]
 
 Remember This!
-[one memorable tip]"""
+[one memorable tip related to the curriculum content]"""
     return call_gemini(prompt, api_key)
 
 def gen_worksheet(lesson_name, lesson_info, level, api_key):
-    prompt = f"""English teacher, Grade 5 Qatar. TOPIC: {lesson_name} LEVEL: {level}
-Create a worksheet (plain text, no asterisks or hash symbols):
+    vocab_str = ", ".join(lesson_info.get("vocabulary", [])[:10])
+    prompt = f"""You are a Grade 5 English teacher in Qatar.
+Create a practice worksheet based STRICTLY on the following textbook content.
+
+TOPIC: {lesson_name}
+CURRICULUM RULES:
+{lesson_info["key_rules"]}
+VOCABULARY TO USE: {vocab_str}
+STUDENT LEVEL: {level}
+
+Write a worksheet (plain text, no asterisks or hash symbols):
 
 EXERCISE 1 - Fill in the Blanks
-Word bank: [5 words]
-5 sentences with one blank each.
+Word bank: [choose 5 words from the vocabulary above]
+5 sentences with one blank each. Use the curriculum rules above.
 
 EXERCISE 2 - Circle the Correct Answer
-4 questions with options a / b / c
+4 questions testing the grammar/phonics rules above. Options: a / b / c
 
-EXERCISE 3 - Write Your Own
-3 writing prompts
+EXERCISE 3 - Write Your Own Sentences
+3 prompts asking the student to write sentences using today's rule.
 
-Adapt to {level} level. No answers given."""
+Adapt difficulty to {level} level. No answers given."""
     return call_gemini(prompt, api_key)
 
 def gen_quiz(lesson_name, lesson_info, level, api_key):
-    prompt = f"""5 MCQ questions for Grade 5 English Qatar.
-TOPIC: {lesson_name} LEVEL: {level}
-Return ONLY valid JSON array:
-[{{"question":"...","options":["A","B","C","D"],"answer":"A"}}]
-5 questions, 4 options, answer must match one option exactly."""
+    prompt = f"""Create 5 multiple-choice questions for Grade 5 English in Qatar.
+Base questions STRICTLY on this textbook content:
+
+TOPIC: {lesson_name}
+CURRICULUM RULES:
+{lesson_info["key_rules"]}
+STUDENT LEVEL: {level}
+
+Return ONLY a valid JSON array, no markdown, no explanation:
+[{{"question":"...","options":["option A text","option B text","option C text","option D text"],"answer":"option A text"}}]
+Rules: exactly 5 questions, 4 options each, answer must match one option exactly, difficulty suits {level} level."""
     raw = call_gemini(prompt, api_key).strip()
     if "```" in raw:
         for p in raw.split("```"):
@@ -449,16 +444,16 @@ if st.session_state.view == "teacher":
 
     with col_b:
         st.markdown("**Today's Lesson (Qatar Platform)**")
-        selected_lesson = st.selectbox("", list(LESSONS.keys()), label_visibility="collapsed", key="t_lesson")
-        lesson = LESSONS[selected_lesson]
+        selected_lesson = st.selectbox("", LESSON_DISPLAY_NAMES, label_visibility="collapsed", key="t_lesson")
+        lesson = LESSON_MAP[selected_lesson]
 
         st.markdown(f"""
         <div class="card card-accent" style="margin-top:12px">
             <div class="card-title">Lesson Posted by Teacher</div>
-            <b>Unit:</b> {lesson['unit']}<br>
+            <b>Unit:</b> {lesson.get('module','')}<br>
             <b>Type:</b> {lesson['type']}<br>
             <b>Objective:</b> {lesson['objective']}<br>
-            <b>Key Rule:</b> <code style="background:#F0E8D8;padding:2px 6px;border-radius:4px;font-size:0.85rem">{lesson['key_rule']}</code>
+            <b>Key Rule:</b> <code style="background:#F0E8D8;padding:2px 6px;border-radius:4px;font-size:0.85rem">{lesson['key_rules']}</code>
         </div>
         """, unsafe_allow_html=True)
 
@@ -503,9 +498,9 @@ if st.session_state.view == "teacher":
 else:
     # Resolve student and lesson from teacher selections
     selected_student = st.session_state.get("t_student", list(STUDENTS.keys())[0])
-    selected_lesson  = st.session_state.get("t_lesson",  list(LESSONS.keys())[0])
+    selected_lesson  = st.session_state.get("t_lesson",  LESSON_DISPLAY_NAMES[0])
     student = STUDENTS[selected_student]
-    lesson  = LESSONS[selected_lesson]
+    lesson  = LESSON_MAP.get(selected_lesson, ALL_LESSONS[0])
 
     st.markdown(f"""
     <div class="card" style="display:flex;align-items:center;gap:16px;margin-bottom:4px">
