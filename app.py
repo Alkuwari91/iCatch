@@ -7,7 +7,6 @@ from curriculum import CURRICULUM, STANDARDS, get_lessons_by_module, get_all_les
 
 st.set_page_config(
     page_title="iCatch | لحق",
-    page_icon="🎓",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
