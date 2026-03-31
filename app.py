@@ -405,7 +405,7 @@ st.markdown("""
     <div style="font-size:3rem;">🎓</div>
     <div>
         <h1>iCatch &nbsp;<span style="font-weight:300;opacity:0.75">|</span>&nbsp; لحق</h1>
-        <span class="arabic">نظام التعافي التعليمي بالذكاء الاصطناعي</span>
+        <span class="arabic">نظام التعافي التعليمي</span>
         <p>Ministry of Education and Higher Education — State of Qatar &nbsp;|&nbsp; وزارة التربية والتعليم</p>
     </div>
 </div>
@@ -418,11 +418,11 @@ with st.sidebar:
     st.markdown("### ⚙️ System Settings")
 
     api_key = st.text_input(
-        "🔑 Gemini API Key (Free)",
+        "🔑 System Key",
         type="password",
         help="Get your free key at: aistudio.google.com"
     )
-    st.caption("👆 Free at: **aistudio.google.com** | No credit card needed")
+    st.caption("👆 aistudio.google.com")
 
     st.markdown("---")
     st.markdown("### 🏫 Session Details")
@@ -461,7 +461,7 @@ with st.sidebar:
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📚 Qatar Platform",
     "👤 Student Profile",
-    "📖 Mini Lesson",
+    "📖 Lesson",
     "📝 Worksheet",
     "✅ Quiz"
 ])
@@ -493,8 +493,7 @@ with tab1:
     <div class="alert-absent">
         ⚠️ ABSENCE DETECTED — <b>{selected_student}</b> ({student['arabic_name']})
         was marked absent today.<br>
-        🤖 System is generating personalised recovery content based on NSIS level:
-        <b>{student['level']}</b>
+        Preparing personalised content based on NSIS level: <b>{student['level']}</b>
     </div>
     """, unsafe_allow_html=True)
 
@@ -535,11 +534,11 @@ with tab2:
 #  TAB 3 — Mini Lesson
 # ══════════════════════════════════════════════════════════════
 with tab3:
-    st.markdown("## 📖 AI-Generated Mini Lesson")
+    st.markdown("## 📖 Today's Mini Lesson")
 
     st.markdown(f"""
     <div class="platform-card">
-        Generating for: <b>{selected_student}</b> &nbsp;|&nbsp;
+        Student: <b>{selected_student}</b> &nbsp;|&nbsp;
         Level: <b>{student['level']}</b> &nbsp;|&nbsp;
         Topic: <b>{selected_lesson}</b>
     </div>
@@ -548,11 +547,11 @@ with tab3:
     if "lesson_content" not in st.session_state:
         st.session_state.lesson_content = None
 
-    if st.button("🚀 Generate Mini Lesson", type="primary", key="btn_lesson"):
+    if st.button("📖 Start Lesson", type="primary", key="btn_lesson"):
         if not api_key:
             st.error("🔑 Please enter your Gemini API Key in the sidebar.")
         else:
-            with st.spinner("✨ Generating personalised lesson..."):
+            with st.spinner("Preparing lesson..."):
                 content = generate_mini_lesson(
                     selected_lesson, lesson, student['level'], api_key
                 )
@@ -582,11 +581,11 @@ with tab4:
     if "worksheet_content" not in st.session_state:
         st.session_state.worksheet_content = None
 
-    if st.button("📄 Generate Worksheet", type="primary", key="btn_worksheet"):
+    if st.button("📝 Open Worksheet", type="primary", key="btn_worksheet"):
         if not api_key:
             st.error("🔑 Please enter your Gemini API Key in the sidebar.")
         else:
-            with st.spinner("📝 Creating personalised worksheet..."):
+            with st.spinner("Preparing worksheet..."):
                 content = generate_worksheet(
                     selected_lesson, lesson, student['level'], api_key
                 )
@@ -602,7 +601,7 @@ with tab4:
 #  TAB 5 — Quiz
 # ══════════════════════════════════════════════════════════════
 with tab5:
-    st.markdown("## ✅ Knowledge Check Quiz")
+    st.markdown("## ✅ Knowledge Check")
 
     st.markdown(f"""
     <div class="platform-card">
@@ -617,11 +616,11 @@ with tab5:
         if key not in st.session_state:
             st.session_state[key] = None if key != "quiz_submitted" else False
 
-    if st.button("🎯 Generate Quiz", type="primary", key="btn_quiz"):
+    if st.button("✅ Start Quiz", type="primary", key="btn_quiz"):
         if not api_key:
             st.error("🔑 Please enter your Gemini API Key in the sidebar.")
         else:
-            with st.spinner("🧠 Building quiz questions..."):
+            with st.spinner("Preparing quiz..."):
                 questions = generate_quiz(
                     selected_lesson, lesson, student['level'], api_key
                 )
@@ -707,4 +706,4 @@ with tab5:
             st.rerun()
 
     elif not st.session_state.quiz_questions:
-        st.info("👆 Click **Generate Quiz** to create 5 personalised questions.")
+        st.info("Click **Start Quiz** to begin the 5-question check.")
