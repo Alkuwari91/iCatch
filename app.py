@@ -8,6 +8,7 @@ from rag import build_corpus, embed_corpus, retrieve, build_context
 
 st.set_page_config(
     page_title="iCatch | لحق",
+    page_icon="🎓",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -267,7 +268,7 @@ LESSON_MAP = {l["display"]: l for l in ALL_LESSONS}
 
 # ─── AI FUNCTIONS ────────────────────────────────────────────
 def call_gemini(prompt, api_key):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     try:
         r = requests.post(url, json={"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"temperature":0.7,"maxOutputTokens":2000}}, timeout=40)
         data = r.json()
@@ -365,115 +366,79 @@ Rules: exactly 5 questions, 4 options each, answer must match one option exactly
         return None
 
 
-def gen_video_lesson(lesson_name, lesson_info, level, api_key):
-    """RAG-powered: generate structured JSON for HTML5 interactive lesson."""
-    corpus  = st.session_state.get("rag_corpus") or []
-    query   = f"{lesson_name} {level} interactive explanation examples"
-    chunks  = retrieve(query, corpus, api_key, top_k=3) if corpus else [lesson_info]
-    context = build_context(chunks)
+def gen_video_lesson(lesson_name, lesson_info, level):
+    """Build HTML5 interactive lesson directly from curriculum — no API needed."""
+    rules_text = lesson_info.get("key_rules", "").strip()
+    vocab_list = lesson_info.get("vocabulary", [])[:8]
+    obj_text   = lesson_info.get("objective", "")
+    module_name = lesson_info.get("module", "")
+    lesson_type = lesson_info.get("type", "Grammar")
 
-    prompt = f"""You are creating a 4-slide interactive lesson for a Grade 5 student in Qatar.
-Use ONLY the curriculum content below as your source.
+    # Split key_rules into lines for slides
+    rule_lines = [l.strip() for l in rules_text.split("\n") if l.strip()]
+    # Slide 2 content: first 3-4 lines (the rule explanation)
+    rule_body  = "<br>".join(rule_lines[:4]) if rule_lines else rules_text[:300]
+    # Slide 3 content: examples (lines starting with - or containing ->)
+    examples   = [l for l in rule_lines if l.startswith("-") or "->" in l or l.startswith("e.g")]
+    if not examples:
+        examples = rule_lines[4:7]
+    ex_body    = "<br>".join(examples[:5]) if examples else "See examples in your worksheet."
+    # Slide 4: last line as tip or vocab
+    tip_body   = rule_lines[-1] if len(rule_lines) > 2 else f"Practice these words: {', '.join(vocab_list[:5])}"
+    vocab_html = " &nbsp; ".join(f'<span style="background:rgba(255,255,255,0.2);padding:3px 10px;border-radius:12px;font-size:0.85rem">{w}</span>' for w in vocab_list)
 
-RETRIEVED CURRICULUM CONTEXT:
-{context}
-
-TARGET LESSON: {lesson_name}
-STUDENT LEVEL: {level}
-
-Return ONLY a valid JSON object, no markdown, no explanation:
-{{
-  "title": "short lesson title",
-  "slides": [
-    {{"id":1,"title":"Learning Goal","body":"one clear sentence stating what we learn today","example":""}},
-    {{"id":2,"title":"The Rule","body":"clear explanation of the grammar or phonics rule","example":"one example sentence from the curriculum"}},
-    {{"id":3,"title":"Examples","body":"3 example sentences from the curriculum content, numbered 1 2 3","example":""}},
-    {{"id":4,"title":"Remember!","body":"one memorable tip from the curriculum","example":"a short practice sentence for the student to complete"}}
-  ]
-}}"""
-
-    raw = call_gemini(prompt, api_key).strip()
-    if "```" in raw:
-        for p in raw.split("```"):
-            p = p.strip().lstrip("json").strip()
-            if p.startswith("{"):
-                raw = p; break
-    s, e = raw.find("{"), raw.rfind("}")+1
-    if s != -1 and e > s:
-        raw = raw[s:e]
-    try:
-        data = json.loads(raw)
-    except Exception:
-        return None
-
-    colors = ["#8D1B3D","#B85C1A","#3D6B2C","#1A5C7A"]
-    icons  = ["🎯","📖","✏️","💡"]
+    level_colors = {"Beginner":"#8D1B3D","Intermediate":"#B85C1A","Advanced":"#3D6B2C"}
+    slide_colors = [level_colors.get(level,"#8D1B3D"), "#1A5C7A", "#3D6B2C", "#6B3D8D"]
+    icons = ["🎯","📖","✏️","💡"]
+    titles = ["Learning Goal","The Rule","Examples","Remember!"]
+    bodies = [obj_text, rule_body, ex_body, tip_body]
 
     slides_html = ""
-    for i, sl in enumerate(data.get("slides",[])):
-        c = colors[i % len(colors)]
-        icon = icons[i % len(icons)]
-        ex = f'<div style="margin-top:14px;background:rgba(255,255,255,0.15);border-radius:8px;padding:10px 14px;font-size:0.9rem;font-style:italic">{sl.get("example","")}</div>' if sl.get("example") else ""
+    for i in range(4):
         slides_html += f'''
-        <div class="slide" id="slide{sl["id"]}" style="display:none">
-            <div style="background:{c};color:white;border-radius:14px;padding:30px 36px;min-height:280px;box-shadow:0 6px 24px rgba(0,0,0,0.15)">
-                <div style="font-size:1.8rem;margin-bottom:10px">{icon}</div>
-                <div style="font-size:1.15rem;font-weight:700;margin-bottom:14px;opacity:0.85">{sl["title"]}</div>
-                <div style="font-size:1rem;line-height:1.75">{sl["body"]}</div>
-                {ex}
-            </div>
+        <div class="slide" id="sl{i+1}" style="display:none">
+          <div style="background:{slide_colors[i]};color:white;border-radius:14px;padding:28px 32px;min-height:270px;box-shadow:0 4px 18px rgba(0,0,0,0.12)">
+            <div style="font-size:1.5rem;margin-bottom:8px">{icons[i]}</div>
+            <div style="font-size:1rem;font-weight:700;opacity:0.8;margin-bottom:12px">{titles[i]}</div>
+            <div style="font-size:0.95rem;line-height:1.8">{bodies[i]}</div>
+          </div>
         </div>'''
 
-    html = f'''<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
+    html = f'''<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
-  body{{margin:0;padding:16px;font-family:Inter,Tajawal,sans-serif;background:#F2EDE6}}
-  .header{{text-align:center;margin-bottom:18px}}
-  .header h2{{margin:0;font-size:1.1rem;color:#2C1F14}}
-  .header p{{margin:4px 0 0;font-size:0.82rem;color:#7A6858}}{lesson_name} · {level} Level
-  .dots{{display:flex;justify-content:center;gap:8px;margin:16px 0}}
-  .dot{{width:10px;height:10px;border-radius:50%;background:#D8CDBC;transition:background .3s;cursor:pointer}}
-  .dot.active{{background:#8D1B3D}}
-  .nav{{display:flex;justify-content:space-between;align-items:center;margin-top:16px}}
-  .btn{{background:#8D1B3D;color:white;border:none;border-radius:8px;padding:10px 28px;font-size:0.9rem;font-weight:600;cursor:pointer;transition:background .2s}}
-  .btn:hover{{background:#6B1530}}
-  .btn:disabled{{background:#D8CDBC;cursor:default}}
-  .counter{{font-size:0.82rem;color:#7A6858}}
-</style>
-</head>
-<body>
-<div class="header">
-  <h2>{data.get("title","Interactive Lesson")}</h2>
-  <p>{lesson_name} · {level} Level</p>
-</div>
+body{{margin:0;padding:14px;font-family:Inter,Tajawal,sans-serif;background:#F2EDE6}}
+.hdr{{text-align:center;margin-bottom:14px}}
+.hdr h3{{margin:0;font-size:1rem;color:#2C1F14}}
+.hdr p{{margin:3px 0 0;font-size:0.78rem;color:#7A6858}}
+.dots{{display:flex;justify-content:center;gap:8px;margin:14px 0}}
+.dot{{width:9px;height:9px;border-radius:50%;background:#D8CDBC;cursor:pointer;transition:background .3s}}
+.dot.on{{background:#8D1B3D}}
+.nav{{display:flex;justify-content:space-between;align-items:center;margin-top:12px}}
+.btn{{background:#8D1B3D;color:white;border:none;border-radius:8px;padding:9px 24px;font-size:0.88rem;font-weight:600;cursor:pointer}}
+.btn:hover{{background:#6B1530}} .btn:disabled{{background:#D8CDBC;cursor:default}}
+.ctr{{font-size:0.8rem;color:#7A6858}}
+.vocab{{margin-top:12px;font-size:0.82rem;color:#7A6858;text-align:center}}
+</style></head><body>
+<div class="hdr"><h3>{lesson_name}</h3><p>{module_name} · {level} Level · {lesson_type}</p></div>
 {slides_html}
 <div class="dots" id="dots"></div>
 <div class="nav">
-  <button class="btn" id="prevBtn" onclick="move(-1)" disabled>Back</button>
-  <span class="counter" id="counter">1 / {len(data.get("slides",[]))}</span>
-  <button class="btn" id="nextBtn" onclick="move(1)">Next</button>
+  <button class="btn" id="p" onclick="mv(-1)" disabled>Back</button>
+  <span class="ctr" id="ctr">1 / 4</span>
+  <button class="btn" id="n" onclick="mv(1)">Next</button>
 </div>
+<div class="vocab">{vocab_html}</div>
 <script>
-var cur=0, total={len(data.get("slides",[]))};
+var c=0;
 var dots=document.getElementById("dots");
-for(var i=0;i<total;i++){{var d=document.createElement("span");d.className="dot"+(i==0?" active":"");d.setAttribute("data-i",i);d.onclick=function(){{goTo(+this.getAttribute("data-i"))}};dots.appendChild(d);}}
-function show(){{
-  for(var i=1;i<=total;i++)document.getElementById("slide"+i).style.display="none";
-  document.getElementById("slide"+(cur+1)).style.display="block";
-  document.querySelectorAll(".dot").forEach(function(d,i){{d.className="dot"+(i==cur?" active":"")}});
-  document.getElementById("counter").textContent=(cur+1)+" / "+total;
-  document.getElementById("prevBtn").disabled=cur==0;
-  document.getElementById("nextBtn").disabled=cur==total-1;
-}}
-function move(d){{cur=Math.max(0,Math.min(total-1,cur+d));show();}}
-function goTo(i){{cur=i;show();}}
+for(var i=0;i<4;i++){{var d=document.createElement("span");d.className="dot"+(i==0?" on":"");(function(x){{d.onclick=function(){{go(x)}}}})(i);dots.appendChild(d);}}
+function show(){{for(var i=1;i<=4;i++)document.getElementById("sl"+i).style.display="none";document.getElementById("sl"+(c+1)).style.display="block";document.querySelectorAll(".dot").forEach(function(d,i){{d.className="dot"+(i==c?" on":"")}});document.getElementById("ctr").textContent=(c+1)+" / 4";document.getElementById("p").disabled=c==0;document.getElementById("n").disabled=c==3;}}
+function mv(d){{c=Math.max(0,Math.min(3,c+d));show();}}
+function go(i){{c=i;show();}}
 show();
-</script>
-</body>
-</html>'''
+</script></body></html>'''
     return html
+
 
 # ─── SESSION STATE ───────────────────────────────────────────
 # ─── RAG corpus (built once per session) ────────────────────
@@ -596,7 +561,7 @@ if st.session_state.view == "teacher":
                         st.session_state.lesson_content    = gen_lesson(selected_lesson, lesson, student['level'], api_key)
                         st.session_state.worksheet_content = gen_worksheet(selected_lesson, lesson, student['level'], api_key)
                         st.session_state.quiz_questions    = gen_quiz(selected_lesson, lesson, student['level'], api_key)
-                        st.session_state.video_html        = gen_video_lesson(selected_lesson, lesson, student['level'], api_key)
+                        st.session_state.video_html        = gen_video_lesson(selected_lesson, lesson, student['level'])
                         st.session_state.pack_sent = True
                     st.rerun()
         else:
